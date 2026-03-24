@@ -33,47 +33,33 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
-    const updateSet: Record<string, unknown> = {};
-
-    const textFields = ["name", "email", "loginMethod"] as const;
-    type TextField = (typeof textFields)[number];
-
-    const assignNullable = (field: TextField) => {
-      const value = user[field];
-      if (value === undefined) return;
-      const normalized = value ?? null;
-      values[field] = normalized;
-      updateSet[field] = normalized;
-    };
-
-    textFields.forEach(assignNullable);
-
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
+    // First try to find existing user
+    const existing = await db.select().from(users).where(eq(users.openId, user.openId)).limit(1);
+    
+    if (existing.length > 0) {
+      // Update existing user
+      const updateData: Partial<InsertUser> = {};
+      if (user.name !== undefined) updateData.name = user.name;
+      if (user.email !== undefined) updateData.email = user.email;
+      if (user.loginMethod !== undefined) updateData.loginMethod = user.loginMethod;
+      if (user.lastSignedIn !== undefined) updateData.lastSignedIn = user.lastSignedIn;
+      if (user.role !== undefined) updateData.role = user.role;
+      
+      if (Object.keys(updateData).length > 0) {
+        await db.update(users).set(updateData).where(eq(users.openId, user.openId));
+      }
+    } else {
+      // Insert new user
+      const insertData: InsertUser = {
+        openId: user.openId,
+        name: user.name ?? null,
+        email: user.email ?? null,
+        loginMethod: user.loginMethod ?? null,
+        lastSignedIn: user.lastSignedIn ?? new Date(),
+        role: user.role ?? (user.openId === ENV.ownerOpenId ? 'admin' : 'user'),
+      };
+      await db.insert(users).values(insertData);
     }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
-
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -110,17 +96,18 @@ export async function upsertGptmakerConfig(config: InsertGptmakerConfig) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
-  await db
-    .insert(gptmakerConfig)
-    .values(config)
-    .onDuplicateKeyUpdate({
-      set: {
-        apiToken: config.apiToken,
-        workspaceId: config.workspaceId,
-        isActive: config.isActive ?? true,
-        updatedAt: new Date(),
-      },
-    });
+  const existing = await db.select().from(gptmakerConfig).where(eq(gptmakerConfig.userId, config.userId)).limit(1);
+  
+  if (existing.length > 0) {
+    await db.update(gptmakerConfig).set({
+      apiToken: config.apiToken,
+      workspaceId: config.workspaceId,
+      isActive: config.isActive ?? true,
+      updatedAt: new Date(),
+    }).where(eq(gptmakerConfig.userId, config.userId));
+  } else {
+    await db.insert(gptmakerConfig).values(config);
+  }
 }
 
 // Chat Cache helpers
@@ -141,22 +128,23 @@ export async function upsertChatCache(cache: InsertChatCache) {
   const db = await getDb();
   if (!db) return;
 
-  await db
-    .insert(chatCache)
-    .values(cache)
-    .onDuplicateKeyUpdate({
-      set: {
-        agentId: cache.agentId,
-        agentName: cache.agentName,
-        userName: cache.userName,
-        humanTalk: cache.humanTalk,
-        finished: cache.finished,
-        unReadCount: cache.unReadCount,
-        lastMessageTime: cache.lastMessageTime,
-        data: cache.data,
-        updatedAt: new Date(),
-      },
-    });
+  const existing = await db.select().from(chatCache).where(eq(chatCache.chatId, cache.chatId)).limit(1);
+  
+  if (existing.length > 0) {
+    await db.update(chatCache).set({
+      agentId: cache.agentId,
+      agentName: cache.agentName,
+      userName: cache.userName,
+      humanTalk: cache.humanTalk,
+      finished: cache.finished,
+      unReadCount: cache.unReadCount,
+      lastMessageTime: cache.lastMessageTime,
+      data: cache.data,
+      updatedAt: new Date(),
+    }).where(eq(chatCache.chatId, cache.chatId));
+  } else {
+    await db.insert(chatCache).values(cache);
+  }
 }
 
 // Subscribed Chats helpers
