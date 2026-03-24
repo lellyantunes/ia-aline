@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1770225162390,
+      "tag": "0000_last_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1770225282984,
+      "tag": "0001_sour_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1770724265222,
+      "tag": "0002_abnormal_iron_patriot",
+      "breakpoints": true
+    }
+  ]
+}
